@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+
+  reports   Report[]
+  auditLogs AuditLog[]
+
+  @@map("admin_users")
+}
+
+model Report {
+  id                       String    @id @default(cuid())
+  reportNumber             String    @unique
+  title                    String
+  organizationNameSnapshot String
+  logoReferenceSnapshot    String?
+  recipientName            String
+  sampleReceiptDate        DateTime
+  generatedAt              DateTime  @default(now())
+  originalFileName         String
+  originalFileReference    String?
+  ageCategory              String?   @default("حقائق")
+  batchIdentifier          String?
+  totalSamples             Int       @default(0)
+  positiveHgbCount         Int       @default(0)
+  positiveHctCount         Int       @default(0)
+  bothPositiveCount        Int       @default(0)
+  hgbThreshold             Decimal   @db.Decimal(6, 2)
+  hctThreshold             Decimal   @db.Decimal(6, 2)
+  status                   String    @default("ACTIVE") // ACTIVE, ARCHIVED
+  createdByAdminId         String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  archivedAt               DateTime?
+
+  adminUser AdminUser? @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  samples   Sample[]
+
+  @@index([reportNumber])
+  @@index([generatedAt])
+  @@index([status])
+  @@index([createdByAdminId])
+  @@map("reports")
+}
+
+model Sample {
+  id           String   @id @default(cuid())
+  reportId     String
+  sampleCode   String
+  rowNumber    Int
+  hgbValue     Decimal  @db.Decimal(6, 2)
+  hgbStatus    String   // POSITIVE, NEGATIVE
+  hctValue     Decimal  @db.Decimal(6, 2)
+  hctStatus    String   // POSITIVE, NEGATIVE
+  bothPositive Boolean  // true for YES, false for NO
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, sampleCode])
+  @@index([reportId])
+  @@index([sampleCode])
+  @@index([hgbStatus])
+  @@index([hctStatus])
+  @@index([bothPositive])
+  @@map("samples")
+}
+
+model ImportJob {
+  id               String        @id @default(cuid())
+  reportId         String?
+  originalFileName String
+  fileReference    String?
+  status           String        @default("PENDING") // PENDING, COMPLETED, FAILED
+  totalRows        Int           @default(0)
+  validRows        Int           @default(0)
+  invalidRows      Int           @default(0)
+  importedRows     Int           @default(0)
+  duplicateRows    Int           @default(0)
+  errorSummary     String?       @db.Text
+  createdAt        DateTime      @default(now())
+  completedAt      DateTime?
+  errors           ImportError[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("import_jobs")
+}
+
+model ImportError {
+  id            String   @id @default(cuid())
+  importJobId   String
+  worksheetName String?
+  rowNumber     Int
+  columnName    String?
+  errorCode     String
+  errorMessage  String   @db.Text
+  originalValue String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId])
+  @@map("import_errors")
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  adminUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  details     String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

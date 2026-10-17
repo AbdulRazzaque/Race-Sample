@@ -1,0 +1,12 @@
+{
+  "/(dashboard)/reports/page": "app/(dashboard)/reports/page.js",
+  "/(dashboard)/reports/[id]/page": "app/(dashboard)/reports/[id]/page.js",
+  "/(dashboard)/history/page": "app/(dashboard)/history/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/api/reports/[id]/export/pdf/route": "app/api/reports/[id]/export/pdf/route.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/api/auth/session/route": "app/api/auth/session/route.js",
+  "/api/reports/route": "app/api/reports/route.js",
+  "/api/reports/[id]/route": "app/api/reports/[id]/route.js",
+  "/api/reports/[id]/export/excel/route": "app/api/reports/[id]/export/excel/route.js"
+}
