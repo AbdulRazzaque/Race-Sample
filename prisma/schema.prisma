@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -38,8 +38,8 @@ model Report {
   positiveHgbCount         Int       @default(0)
   positiveHctCount         Int       @default(0)
   bothPositiveCount        Int       @default(0)
-  hgbThreshold             Decimal   @db.Decimal(6, 2)
-  hctThreshold             Decimal   @db.Decimal(6, 2)
+  hgbThreshold             Decimal
+  hctThreshold             Decimal
   status                   String    @default("ACTIVE") // ACTIVE, ARCHIVED
   createdByAdminId         String?
   createdAt                DateTime  @default(now())
@@ -61,9 +61,9 @@ model Sample {
   reportId     String
   sampleCode   String
   rowNumber    Int
-  hgbValue     Decimal  @db.Decimal(6, 2)
+  hgbValue     Decimal
   hgbStatus    String   // POSITIVE, NEGATIVE
-  hctValue     Decimal  @db.Decimal(6, 2)
+  hctValue     Decimal
   hctStatus    String   // POSITIVE, NEGATIVE
   bothPositive Boolean  // true for YES, false for NO
   createdAt    DateTime @default(now())
@@ -91,7 +91,7 @@ model ImportJob {
   invalidRows      Int           @default(0)
   importedRows     Int           @default(0)
   duplicateRows    Int           @default(0)
-  errorSummary     String?       @db.Text
+  errorSummary     String?
   createdAt        DateTime      @default(now())
   completedAt      DateTime?
   errors           ImportError[]
@@ -108,8 +108,8 @@ model ImportError {
   rowNumber     Int
   columnName    String?
   errorCode     String
-  errorMessage  String   @db.Text
-  originalValue String?  @db.Text
+  errorMessage  String
+  originalValue String?
   createdAt     DateTime @default(now())
 
   importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
@@ -121,7 +121,7 @@ model ImportError {
 model AppSetting {
   id        String   @id @default(cuid())
   key       String   @unique
-  value     String   @db.Text
+  value     String
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")
@@ -133,7 +133,7 @@ model AuditLog {
   action      String
   entityType  String
   entityId    String?
-  details     String?  @db.Text
+  details     String?
   createdAt   DateTime @default(now())
 
   adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)

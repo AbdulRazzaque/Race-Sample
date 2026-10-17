@@ -17,7 +17,7 @@ export const Navbar: React.FC = () => {
           setUsername(data.user.username);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const getPageTitle = (path: string) => {

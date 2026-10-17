@@ -12,6 +12,11 @@ import {
   AlertCircle,
   RefreshCw,
   KeyRound,
+  Database,
+  HardDrive,
+  FolderOpen,
+  CloudDownload,
+  Server,
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -66,9 +71,100 @@ export default function SettingsPage() {
     }
   };
 
+  // Desktop & SQLite Database State
+  const [dbInfo, setDbInfo] = useState<{
+    databasePath: string;
+    sizeBytes: number;
+    lastModified: string | null;
+    totalBackups: number;
+    migrationsApplied: string[];
+    backups?: Array<{ fileName: string; sizeBytes: number; createdAt: string }>;
+  } | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('1.0.0');
+  const [isElectron, setIsElectron] = useState<boolean>(false);
+  const [creatingBackup, setCreatingBackup] = useState<boolean>(false);
+  const [checkingUpdates, setCheckingUpdates] = useState<boolean>(false);
+  const [updateMsg, setUpdateMsg] = useState<{ type: 'info' | 'success' | 'warning' | 'error'; text: string } | null>(null);
+
+  const fetchDatabaseInfo = async () => {
+    try {
+      const res = await fetch('/api/system/database');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setDbInfo(json.data);
+        }
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     fetchSettings();
+    fetchDatabaseInfo();
+
+    // Check if running inside Electron runtime
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      setIsElectron(true);
+      (window as any).electronAPI.getAppVersion().then((v: string) => {
+        if (v) setAppVersion(v);
+      }).catch(() => {});
+    }
   }, []);
+
+  const handleCreateBackup = async () => {
+    try {
+      setCreatingBackup(true);
+      const res = await fetch('/api/system/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'backup' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: `Safety backup created: ${data.fileName} (${(data.sizeBytes / 1024).toFixed(1)} KB)` });
+        await fetchDatabaseInfo();
+      } else {
+        throw new Error(data.error || 'Backup creation failed');
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message });
+    } finally {
+      setCreatingBackup(false);
+    }
+  };
+
+  const handleOpenUserDataFolder = async () => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      await (window as any).electronAPI.openUserDataFolder();
+    } else {
+      setNotification({ type: 'error', message: 'Folder access is available when running in the Desktop application.' });
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      setCheckingUpdates(true);
+      setUpdateMsg(null);
+      try {
+        const res = await (window as any).electronAPI.checkForUpdates();
+        if (res.status === 'development') {
+          setUpdateMsg({ type: 'info', text: 'Application is running in development mode. Updates are active in packaged installer builds.' });
+        } else if (res.status === 'unconfigured') {
+          setUpdateMsg({ type: 'info', text: 'No update server configured for this local build. Production releases use GitHub / update hosting.' });
+        } else if (res.status === 'checking') {
+          setUpdateMsg({ type: 'success', text: 'Update check initiated. System will notify if a newer version is found.' });
+        } else if (res.status === 'error') {
+          setUpdateMsg({ type: 'warning', text: `Update check note: ${res.error}` });
+        }
+      } catch (err: any) {
+        setUpdateMsg({ type: 'error', text: err.message });
+      } finally {
+        setCheckingUpdates(false);
+      }
+    } else {
+      setUpdateMsg({ type: 'info', text: 'Desktop auto-updater active when running inside Electron.' });
+    }
+  };
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -482,6 +578,139 @@ export default function SettingsPage() {
               </div>
             </form>
           )}
+        </div>
+
+        {/* Desktop Architecture & SQLite Database Management */}
+        <div className="bg-white rounded-xl border border-[#D9E0E8] shadow-xs overflow-hidden">
+          <div className="px-5 py-4 bg-slate-50/60 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Database className="w-4 h-4 text-[#1E60AA]" />
+              <div>
+                <h3 className="text-xs font-bold text-[#0F2642] uppercase tracking-wider flex items-center gap-2">
+                  <span>Desktop Software &amp; Local Database</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                    v{appVersion}
+                  </span>
+                  {isElectron && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800">
+                      Desktop Native
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Zero-dependency embedded SQLite database with automated migration &amp; pre-migration backups
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCreateBackup}
+                disabled={creatingBackup}
+                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-medium rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
+              >
+                <HardDrive className="w-3.5 h-3.5 text-blue-600" />
+                <span>{creatingBackup ? 'Creating...' : 'Create Backup'}</span>
+              </button>
+
+              {isElectron && (
+                <button
+                  type="button"
+                  onClick={handleOpenUserDataFolder}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-medium rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
+                >
+                  <FolderOpen className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Open Data Folder</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCheckUpdates}
+                disabled={checkingUpdates}
+                className="px-3 py-1.5 bg-[#0F2642] hover:bg-[#1E60AA] text-white text-xs font-medium rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
+              >
+                <CloudDownload className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{checkingUpdates ? 'Checking...' : 'Check Updates'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {updateMsg && (
+              <div
+                className={`p-3 rounded-lg text-xs border flex items-center gap-2 ${
+                  updateMsg.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : updateMsg.type === 'warning'
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                    : updateMsg.type === 'error'
+                    ? 'bg-red-50 text-red-800 border-red-200'
+                    : 'bg-blue-50 text-blue-800 border-blue-200'
+                }`}
+              >
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{updateMsg.text}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200/80">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Database File Storage
+                </span>
+                <span className="text-xs font-semibold text-slate-800 break-all block font-mono">
+                  {dbInfo?.databasePath || 'Resolving...'}
+                </span>
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Preserved in user AppData across all software updates
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200/80">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Database Size &amp; Status
+                </span>
+                <span className="text-xs font-bold text-slate-800 block">
+                  {dbInfo?.sizeBytes ? `${(dbInfo.sizeBytes / 1024).toFixed(1)} KB` : 'Active'}
+                </span>
+                <span className="text-[10px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>SQLite Online (No XAMPP / MySQL required)</span>
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-slate-50/80 rounded-lg border border-slate-200/80">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Safety Backups &amp; Migrations
+                </span>
+                <span className="text-xs font-bold text-slate-800 block">
+                  {dbInfo?.totalBackups ?? 0} Backups Available
+                </span>
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  {dbInfo?.migrationsApplied?.length ?? 0} Migration(s) Applied Safely
+                </span>
+              </div>
+            </div>
+
+            {dbInfo?.backups && dbInfo.backups.length > 0 && (
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-3.5 py-2 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700">Recent Automatic &amp; Manual Backups</span>
+                  <span className="text-[10px] text-slate-500">Stored in /backups</span>
+                </div>
+                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 text-xs">
+                  {dbInfo.backups.slice(0, 5).map((b, idx) => (
+                    <div key={idx} className="px-3.5 py-2 flex items-center justify-between hover:bg-slate-50/50">
+                      <span className="font-mono text-slate-700 text-[11px]">{b.fileName}</span>
+                      <span className="text-slate-400 text-[11px]">{(b.sizeBytes / 1024).toFixed(1)} KB</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </AppShell>

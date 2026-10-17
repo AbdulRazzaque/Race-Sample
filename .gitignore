@@ -1,1 +1,8 @@
 node_modules
+.next
+dist
+dist-electron
+*.db
+*.db-journal
+backups/
+.env.local

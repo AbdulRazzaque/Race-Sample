@@ -58,12 +58,11 @@ export function getPdfFontPaths(): { regularFontPath: string; boldFontPath: stri
   const projectRegular = path.join(process.cwd(), 'public', 'fonts', 'arial.ttf');
   const projectBold = path.join(process.cwd(), 'public', 'fonts', 'arialbd.ttf');
 
-  const regularFontPath = fs.existsSync(projectRegular)
-    ? projectRegular
-    : 'C:\\Windows\\Fonts\\arial.ttf';
-  const boldFontPath = fs.existsSync(projectBold)
-    ? projectBold
-    : 'C:\\Windows\\Fonts\\arialbd.ttf';
+  const winDir = process.env.WINDIR || process.env.SystemRoot || 'C:\\Windows';
+  const sysFont = (name: string) => path.join(winDir, 'Fonts', name);
+
+  const regularFontPath = fs.existsSync(projectRegular) ? projectRegular : sysFont('arial.ttf');
+  const boldFontPath = fs.existsSync(projectBold) ? projectBold : sysFont('arialbd.ttf');
 
   return { regularFontPath, boldFontPath };
 }
