@@ -18,7 +18,8 @@
     "electron:dev": "npm run compile:electron && electron .",
     "build:app": "next build && node scripts/prepare-standalone.js && npm run compile:electron",
     "electron:pack": "npm run build:app && electron-builder --dir",
-    "electron:dist": "npm run build:app && electron-builder"
+    "electron:dist": "npm run build:app && electron-builder && node scripts/update-installed-app.js",
+    "app:update": "npm run electron:dist"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

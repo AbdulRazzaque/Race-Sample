@@ -368,17 +368,32 @@ export class ExportService {
 
         const samplesToRender = isPositiveOnly
           ? data.samples
-              .filter((s) => s.bothPositive)
-              .sort((a, b) => a.sampleCode.localeCompare(b.sampleCode))
+            .filter((s) => s.bothPositive)
+            .sort((a, b) => a.sampleCode.localeCompare(b.sampleCode))
           : data.samples;
 
         // Path to reference logos
-        const resolveAsset = (fileName: string) => {
-          const refPath = path.join(process.cwd(), 'reference-assets', fileName);
-          if (fs.existsSync(refPath)) return refPath;
-          const pubPath = path.join(process.cwd(), 'public', 'images', fileName);
-          if (fs.existsSync(pubPath)) return pubPath;
-          return refPath;
+        const resolveAsset = (fileName: string): string => {
+          const candidatePaths = [
+            path.join(process.cwd(), 'reference-assets', fileName),
+            path.join(process.cwd(), 'public', 'images', fileName),
+            path.join(__dirname, '..', '..', '..', 'reference-assets', fileName),
+            path.join(__dirname, '..', '..', '..', 'public', 'images', fileName),
+          ];
+
+          const resourcesPath = (process as any).resourcesPath;
+          if (resourcesPath) {
+            candidatePaths.push(
+              path.join(resourcesPath, 'standalone', 'reference-assets', fileName),
+              path.join(resourcesPath, 'standalone', 'public', 'images', fileName)
+            );
+          }
+
+          for (const p of candidatePaths) {
+            if (fs.existsSync(p)) return p;
+          }
+
+          return path.join(process.cwd(), 'reference-assets', fileName);
         };
         const workspaceLogo = resolveAsset('FIRST LAB.png');
         const workspaceCommittee = resolveAsset('COMMITTEE LOGO.jpg');
@@ -392,15 +407,15 @@ export class ExportService {
             doc.addPage();
           }
 
-          let currentY = 25;
+          let currentY = 22;
 
           // 1. TOP HEADER (Logos & Center Title)
           if (fs.existsSync(workspaceLogo)) {
-            doc.image(workspaceLogo, leftMargin, currentY, { width: 105, height: 45 });
+            doc.image(workspaceLogo, leftMargin, currentY, { width: 125, height: 55 });
           }
 
           if (fs.existsSync(workspaceCommittee)) {
-            doc.image(workspaceCommittee, rightMargin - 55, currentY, { width: 50, height: 50 });
+            doc.image(workspaceCommittee, rightMargin - 62, currentY - 2, { width: 62, height: 62 });
           }
 
           // Center Title
@@ -408,7 +423,7 @@ export class ExportService {
             .font('AppFont-Bold')
             .fontSize(15)
             .fillColor('#173B65')
-            .text('CBC BLOOD TEST ANALYSIS REPORT', leftMargin, currentY + 4, {
+            .text('CBC BLOOD TEST ANALYSIS REPORT', leftMargin, currentY + 6, {
               align: 'center',
               width: printableWidth,
             });
@@ -417,12 +432,12 @@ export class ExportService {
             .font('AppFont-Bold')
             .fontSize(12)
             .fillColor('#E53935')
-            .text(formatArabicForPdf(data.title || 'Camel Racing Festival'), leftMargin, currentY + 22, {
+            .text(formatArabicForPdf(data.title || 'Camel Racing Festival'), leftMargin, currentY + 26, {
               align: 'center',
               width: printableWidth,
             });
 
-          currentY += 55;
+          currentY += 68;
 
           // 2. METADATA INFO BOX (Rounded Border Table matching reference image)
           const metaBoxWidth = 240;
@@ -494,37 +509,39 @@ export class ExportService {
 
           currentY += metaBoxHeight + 10;
 
-          // 3. THRESHOLD EXPLANATION BANNER (Bordered box matching reference)
-          const bannerHeight = 32;
+          // 3. THRESHOLD EXPLANATION BANNER (Bordered box with proper padding & height)
+          const bannerHeight = 44;
           doc
-            .roundedRect(leftMargin, currentY, printableWidth, bannerHeight, 4)
+            .roundedRect(leftMargin, currentY, printableWidth, bannerHeight, 5)
             .lineWidth(1)
             .strokeColor('#173B65')
-            .stroke();
+            .fillAndStroke('#F8FAFC', '#173B65');
 
           doc
             .font('AppFont')
             .fontSize(7.5)
-            .fillColor('#1F2937')
+            .fillColor('#334155')
             .text(
               'Samples are considered POSITIVE under Camel Racing Committee regulations when BOTH Hemoglobin (HGB) and Hematocrit (HCT) reach or exceed the defined limits: ',
-              leftMargin + 6,
-              currentY + 5,
-              { width: printableWidth - 12 }
+              leftMargin + 8,
+              currentY + 6,
+              { width: printableWidth - 16, lineGap: 1.5 }
             );
 
+          const hgbStr = Number(data.hgbThreshold).toFixed(1);
+          const hctStr = Number(data.hctThreshold).toFixed(1);
           doc
             .font('AppFont-Bold')
-            .fontSize(8)
-            .fillColor('#E53935')
+            .fontSize(8.5)
+            .fillColor('#DC2626')
             .text(
-              `Criteria: (HGB >= ${data.hgbThreshold} g/dL, HCT >= ${data.hctThreshold}%)`,
-              leftMargin + 6,
-              currentY + 18,
-              { width: printableWidth - 12, underline: true }
+              `Criteria: (HGB >= ${hgbStr} g/dL, HCT >= ${hctStr}%)`,
+              leftMargin + 8,
+              currentY + 26,
+              { width: printableWidth - 16, underline: true }
             );
 
-          currentY += bannerHeight + 10;
+          currentY += bannerHeight + 12;
 
           // 4. SECTION TITLE
           if (isPositiveOnly) {

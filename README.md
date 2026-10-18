@@ -103,7 +103,7 @@ Navigate to `http://localhost:3000`. You will be redirected to `/login`.
 
 Default administrator credentials:
 - **Username**: `admin`
-- **Password**: `Admin@RaceSamples2026`
+- **Password**: `admin123`
 
 ---
 

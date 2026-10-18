@@ -30,9 +30,9 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    console.error('Positive PDF export error:', error);
+    console.error('Positive PDF export error:', error?.stack || error);
     return NextResponse.json(
-      { success: false, error: 'Failed to generate Positive PDF report' },
+      { success: false, error: 'Failed to generate Positive PDF report: ' + (error?.message || 'Server error') },
       { status: 500 }
     );
   }

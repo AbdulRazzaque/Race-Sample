@@ -30,9 +30,9 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    console.error('Full report Excel export error:', error);
+    console.error('Full report Excel export error:', error?.stack || error);
     return NextResponse.json(
-      { success: false, error: 'Failed to generate Excel report' },
+      { success: false, error: 'Failed to generate Excel report: ' + (error?.message || 'Server error') },
       { status: 500 }
     );
   }

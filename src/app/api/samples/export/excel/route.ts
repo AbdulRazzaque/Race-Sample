@@ -101,9 +101,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error('Export selected/filtered samples error:', error);
+    console.error('Export selected/filtered samples error:', error?.stack || error);
     return NextResponse.json(
-      { success: false, error: 'Failed to export samples' },
+      { success: false, error: 'Failed to export samples: ' + (error?.message || 'Server error') },
       { status: 500 }
     );
   }

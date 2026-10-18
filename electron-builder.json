@@ -15,7 +15,9 @@
       "to": "standalone",
       "filter": [
         "**/*",
-        "!**/*.map"
+        "!**/*.map",
+        "!node_modules",
+        "!node_modules/**"
       ]
     },
     {

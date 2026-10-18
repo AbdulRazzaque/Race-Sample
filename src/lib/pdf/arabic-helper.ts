@@ -54,15 +54,32 @@ export function formatArabicForPdf(text: string | null | undefined): string {
  * Resolves font paths for regular and bold TrueType fonts that support Unicode and Arabic
  */
 export function getPdfFontPaths(): { regularFontPath: string; boldFontPath: string } {
-  // Check local project fonts directory first
-  const projectRegular = path.join(process.cwd(), 'public', 'fonts', 'arial.ttf');
-  const projectBold = path.join(process.cwd(), 'public', 'fonts', 'arialbd.ttf');
+  // Check candidate font directories
+  const candidateDirs = [
+    path.join(process.cwd(), 'public', 'fonts'),
+    path.join(__dirname, '..', '..', '..', 'public', 'fonts'),
+  ];
+
+  const resourcesPath = (process as any).resourcesPath;
+  if (resourcesPath) {
+    candidateDirs.push(path.join(resourcesPath, 'standalone', 'public', 'fonts'));
+  }
+
+  let regularFontPath = '';
+  let boldFontPath = '';
+
+  for (const dir of candidateDirs) {
+    const reg = path.join(dir, 'arial.ttf');
+    const bold = path.join(dir, 'arialbd.ttf');
+    if (!regularFontPath && fs.existsSync(reg)) regularFontPath = reg;
+    if (!boldFontPath && fs.existsSync(bold)) boldFontPath = bold;
+  }
 
   const winDir = process.env.WINDIR || process.env.SystemRoot || 'C:\\Windows';
   const sysFont = (name: string) => path.join(winDir, 'Fonts', name);
 
-  const regularFontPath = fs.existsSync(projectRegular) ? projectRegular : sysFont('arial.ttf');
-  const boldFontPath = fs.existsSync(projectBold) ? projectBold : sysFont('arialbd.ttf');
+  if (!regularFontPath) regularFontPath = sysFont('arial.ttf');
+  if (!boldFontPath) boldFontPath = sysFont('arialbd.ttf');
 
   return { regularFontPath, boldFontPath };
 }

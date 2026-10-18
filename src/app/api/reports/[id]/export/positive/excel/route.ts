@@ -30,9 +30,9 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    console.error('Positive Excel export error:', error);
+    console.error('Positive Excel export error:', error?.stack || error);
     return NextResponse.json(
-      { success: false, error: 'Failed to generate Positive Excel report' },
+      { success: false, error: 'Failed to generate Positive Excel report: ' + (error?.message || 'Server error') },
       { status: 500 }
     );
   }

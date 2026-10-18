@@ -73,11 +73,19 @@ export class ServerManager {
   /**
    * Waits for the local Next.js server to start responding
    */
-  private static async waitForServerReady(port: number, timeoutMs: number = 30000): Promise<void> {
+  private static async waitForServerReady(port: number, timeoutMs: number = 45000, getErrorContext?: () => string | null): Promise<void> {
     const startTime = Date.now();
     const url = `http://127.0.0.1:${port}/api/auth/session`;
 
     while (Date.now() - startTime < timeoutMs) {
+      // If server process has already crashed/exited, fail immediately instead of hanging
+      if (getErrorContext) {
+        const failureReason = getErrorContext();
+        if (failureReason) {
+          throw new Error(`Next.js local server process terminated unexpectedly:\n\n${failureReason}`);
+        }
+      }
+
       try {
         const isReady = await new Promise<boolean>((resolve) => {
           const req = http.get(url, (res) => {
@@ -99,7 +107,8 @@ export class ServerManager {
       await new Promise((r) => setTimeout(r, 400));
     }
 
-    throw new Error(`Next.js local server did not become ready within ${timeoutMs}ms on port ${port}`);
+    const lastErr = getErrorContext ? getErrorContext() : null;
+    throw new Error(`Next.js local server did not become ready within ${timeoutMs}ms on port ${port}.${lastErr ? '\n\n' + lastErr : ''}`);
   }
 
   /**
@@ -210,8 +219,14 @@ export class ServerManager {
       windowsHide: true,
     });
 
+    let serverProcessExited = false;
+    let serverExitCode: number | null = null;
+    let serverExitSignal: string | null = null;
+    let stderrChunks: string[] = [];
+
     this.serverProcess.on('error', (err) => {
       console.error('[ServerManager] Server process error:', err);
+      stderrChunks.push(`Process launch error: ${err.message}`);
     });
 
     this.serverProcess.stdout?.on('data', (chunk) => {
@@ -219,15 +234,26 @@ export class ServerManager {
     });
 
     this.serverProcess.stderr?.on('data', (chunk) => {
-      console.error(`[NextServer:Err] ${chunk.toString().trim()}`);
+      const msg = chunk.toString().trim();
+      console.error(`[NextServer:Err] ${msg}`);
+      stderrChunks.push(msg);
+      if (stderrChunks.length > 20) stderrChunks.shift();
     });
 
     this.serverProcess.on('exit', (code, signal) => {
       console.log(`[ServerManager] Next.js server process exited with code ${code}, signal ${signal}`);
+      serverProcessExited = true;
+      serverExitCode = code;
+      serverExitSignal = signal;
       this.serverProcess = null;
     });
 
-    await this.waitForServerReady(this.serverPort);
+    await this.waitForServerReady(this.serverPort, 45000, () => {
+      if (serverProcessExited) {
+        return `Process terminated with code ${serverExitCode} (signal: ${serverExitSignal || 'none'}).\n\nOutput:\n${stderrChunks.join('\n') || '(no error logs captured)'}`;
+      }
+      return null;
+    });
     console.log(`[ServerManager] Next.js server successfully listening at http://127.0.0.1:${this.serverPort}`);
 
     return {

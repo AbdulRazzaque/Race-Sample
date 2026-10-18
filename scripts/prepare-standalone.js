@@ -58,4 +58,80 @@ if (fs.existsSync(envSrc)) {
   fs.copyFileSync(envSrc, envDest);
 }
 
+// 6. Ensure complete node_modules for export dependencies (pdfkit, exceljs, arabic reshaper, bidi)
+// Next.js NFT traces can omit vital conditional export files (.mjs) like generator-function/require.mjs
+// and async-function/require.mjs, causing 500 runtime errors in packaged production.
+const rootNodeModules = path.join(rootDir, 'node_modules');
+const standaloneNodeModules = path.join(standaloneDir, 'node_modules');
+
+if (fs.existsSync(rootNodeModules) && fs.existsSync(standaloneNodeModules)) {
+  console.log('[prepare-standalone] Synchronizing export dependencies into standalone node_modules...');
+
+  function getRecursiveDependencies(pkgName, seen = new Set()) {
+    if (seen.has(pkgName)) return seen;
+    seen.add(pkgName);
+    const pkgJsonPath = path.join(rootNodeModules, pkgName, 'package.json');
+    if (!fs.existsSync(pkgJsonPath)) return seen;
+    try {
+      const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+      const deps = Object.keys(pkgJson.dependencies || {});
+      for (const d of deps) {
+        getRecursiveDependencies(d, seen);
+      }
+    } catch {}
+    return seen;
+  }
+
+  const exportCorePackages = [
+    'pdfkit',
+    'exceljs',
+    'arabic-persian-reshaper',
+    'bidi-js',
+    'generator-function',
+    'async-function',
+    'es-abstract',
+    'es-get-iterator',
+    'uuid',
+  ];
+
+  const allExportDeps = new Set();
+  for (const pkg of exportCorePackages) {
+    getRecursiveDependencies(pkg, allExportDeps);
+  }
+
+  let copiedCount = 0;
+  for (const pkg of allExportDeps) {
+    const srcPkgDir = path.join(rootNodeModules, pkg);
+    const destPkgDir = path.join(standaloneNodeModules, pkg);
+    if (fs.existsSync(srcPkgDir)) {
+      const parentDir = path.dirname(destPkgDir);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      fs.cpSync(srcPkgDir, destPkgDir, { recursive: true, force: true });
+      copiedCount++;
+    }
+  }
+
+  console.log(`[prepare-standalone] Successfully copied ${copiedCount} export dependency packages to standalone node_modules.`);
+
+  // Also sync to unpacked dist if it exists
+  const distStandaloneNM = path.join(rootDir, 'dist', 'win-unpacked', 'resources', 'standalone', 'node_modules');
+  if (fs.existsSync(distStandaloneNM)) {
+    console.log('[prepare-standalone] Synchronizing export dependencies to dist/win-unpacked/resources/standalone/node_modules...');
+    for (const pkg of allExportDeps) {
+      const srcPkgDir = path.join(rootNodeModules, pkg);
+      const destPkgDir = path.join(distStandaloneNM, pkg);
+      if (fs.existsSync(srcPkgDir)) {
+        const parentDir = path.dirname(destPkgDir);
+        if (!fs.existsSync(parentDir)) {
+          fs.mkdirSync(parentDir, { recursive: true });
+        }
+        fs.cpSync(srcPkgDir, destPkgDir, { recursive: true, force: true });
+      }
+    }
+    console.log('[prepare-standalone] Successfully synchronized unpacked dist node_modules.');
+  }
+}
+
 console.log('[prepare-standalone] Successfully prepared standalone assets.');
