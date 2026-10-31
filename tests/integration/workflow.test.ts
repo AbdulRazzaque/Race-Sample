@@ -143,4 +143,109 @@ describe('End-to-End Core Workflow Integration Tests', () => {
     const badResult = await AuthService.authenticateAdmin('admin', 'WrongPassword123!');
     expect(badResult.success).toBe(false);
   });
+
+  test('5. Analyzer CSV parsing with 250+ columns, header autodetection, and preview calculation', async () => {
+    const fixturePath = path.join(process.cwd(), 'tests', 'fixtures', 'analyzer_sample.csv');
+    const buffer = fs.readFileSync(fixturePath);
+
+    const preview = await ImportService.parseAndPreview(
+      buffer,
+      'analyzer_sample.csv',
+      undefined,
+      undefined,
+      { hgbThreshold: 14.0, hctThreshold: 32.0 }
+    );
+
+    // Verify autodetection
+    expect(preview.detectedColumns.sampleCode).toBe('Sample No.');
+    expect(preview.detectedColumns.hgb).toBe('HGB(g/dL)');
+    expect(preview.detectedColumns.hct).toBe('HCT(%)');
+
+    // Verify counts
+    expect(preview.totalParsedRows).toBe(9);
+    expect(preview.validRowCount).toBe(9);
+    expect(preview.invalidRowCount).toBe(0);
+    expect(preview.summary.bothPositiveCount).toBe(5); // F2618, F2622, F2623, F2624, F2626
+    expect(preview.summary.positiveHgbCount).toBe(6);  // F2618, F2619, F2622, F2623, F2624, F2626
+    expect(preview.summary.positiveHctCount).toBe(5);  // F2618, F2622, F2623, F2624, F2626
+
+    // Verify accurate decimal preservation and status
+    const f2618 = preview.validRows.find((r) => r.sampleCode === 'F2618');
+    expect(f2618).toBeDefined();
+    expect(f2618?.hgbValue).toBe(14.3);
+    expect(f2618?.hctValue).toBe(32);
+    expect(f2618?.hgbStatus).toBe('POSITIVE');
+    expect(f2618?.hctStatus).toBe('POSITIVE');
+    expect(f2618?.bothPositive).toBe(true);
+
+    const f2619 = preview.validRows.find((r) => r.sampleCode === 'F2619');
+    expect(f2619).toBeDefined();
+    expect(f2619?.hgbValue).toBe(14);
+    expect(f2619?.hctValue).toBe(31.4);
+    expect(f2619?.hgbStatus).toBe('POSITIVE');
+    expect(f2619?.hctStatus).toBe('NEGATIVE');
+    expect(f2619?.bothPositive).toBe(false);
+
+    const f2620 = preview.validRows.find((r) => r.sampleCode === 'F2620');
+    expect(f2620).toBeDefined();
+    expect(f2620?.hgbValue).toBe(13.3);
+    expect(f2620?.hctValue).toBe(30.5);
+    expect(f2620?.hgbStatus).toBe('NEGATIVE');
+    expect(f2620?.hctStatus).toBe('NEGATIVE');
+    expect(f2620?.bothPositive).toBe(false);
+  });
+
+  test('6. Validation throws error if a required column is missing', async () => {
+    const invalidCsv = 'Notice row,,,,,\nNickname,Date,Sample No.,WBC,HGB(g/dL)\nSysmex,18/10,F100,12.5,14.5\n';
+    const buffer = Buffer.from(invalidCsv);
+
+    await expect(
+      ImportService.parseAndPreview(buffer, 'missing_hct.csv')
+    ).rejects.toThrow(/Required column\(s\) missing from file:.*HCT\(%\)/);
+  });
+
+  test('7. Validation throws error on duplicate column mappings', async () => {
+    const csvContent = 'Notice,,,,,\nSample No.,HGB(g/dL),HCT(%)\nF100,14.5,32.0\n';
+    const buffer = Buffer.from(csvContent);
+
+    await expect(
+      ImportService.parseAndPreview(
+        buffer,
+        'duplicate_map.csv',
+        undefined,
+        { sampleCode: 'Sample No.', hgb: 'Sample No.', hct: 'HCT(%)' }
+      )
+    ).rejects.toThrow(/Duplicate column mapping/);
+  });
+
+  test('8. Valid .xls file parsing and preview', async () => {
+    const fixturePath = path.join(process.cwd(), 'tests', 'fixtures', 'sample_race.xls');
+    const buffer = fs.readFileSync(fixturePath);
+
+    const preview = await ImportService.parseAndPreview(
+      buffer,
+      'sample_race.xls',
+      undefined,
+      undefined,
+      { hgbThreshold: 14.0, hctThreshold: 32.0 }
+    );
+
+    expect(preview.validRowCount).toBe(2);
+    expect(preview.validRows[0].sampleCode).toBe('F3001');
+    expect(preview.validRows[0].hgbValue).toBe(14.5);
+    expect(preview.validRows[0].hctValue).toBe(33.2);
+    expect(preview.validRows[0].bothPositive).toBe(true);
+  });
+
+  test('9. Validation throws error on completely empty file or malformed CSV', async () => {
+    const emptyBuf = Buffer.from('');
+    await expect(
+      ImportService.parseAndPreview(emptyBuf, 'empty.csv')
+    ).rejects.toThrow(/completely empty/i);
+
+    const malformedCsv = 'Sample No.,HGB(g/dL),HCT(%)\n"unclosed quote,14.5,32.0\n';
+    await expect(
+      ImportService.parseAndPreview(Buffer.from(malformedCsv), 'malformed.csv')
+    ).rejects.toThrow(/CSV Parsing error/i);
+  });
 });

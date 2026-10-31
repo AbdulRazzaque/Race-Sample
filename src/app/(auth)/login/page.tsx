@@ -7,7 +7,7 @@ import { Lock, User, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react'
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('Admin@RaceSamples2026');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

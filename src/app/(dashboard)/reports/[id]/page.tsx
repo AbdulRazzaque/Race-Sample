@@ -53,7 +53,7 @@ export default function FormalReportPreviewPage() {
 
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'full' | 'positive'>('full');
+  const [viewMode, setViewMode] = useState<'full' | 'positive' | 'negative'>('full');
 
   useEffect(() => {
     fetch(`/api/reports/${id}`)
@@ -62,7 +62,7 @@ export default function FormalReportPreviewPage() {
         return res.json();
       })
       .then((data) => setReport(data.data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -99,8 +99,14 @@ export default function FormalReportPreviewPage() {
   }
 
   const positiveSamplesOnly = report.samples
-    .filter((s) => s.bothPositive)
+    .filter((s) => s.hgbStatus === 'POSITIVE' || s.hctStatus === 'POSITIVE')
     .sort((a, b) => a.sampleCode.localeCompare(b.sampleCode));
+
+  const negativeSamplesOnly = report.samples
+    .filter((s) => s.hgbStatus !== 'POSITIVE' || s.hctStatus !== 'POSITIVE')
+    .sort((a, b) => a.sampleCode.localeCompare(b.sampleCode));
+
+  const negativeCount = negativeSamplesOnly.length;
 
   return (
     <AppShell>
@@ -123,7 +129,10 @@ export default function FormalReportPreviewPage() {
                   {report.samples.length} Samples
                 </span>
                 <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-50 text-[#E53935] border border-red-200">
-                  {report.bothPositiveCount} Both Positive
+                  {positiveSamplesOnly.length} Positive
+                </span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
+                  {negativeCount} Negative
                 </span>
               </div>
               <h1 className="text-xs text-slate-500 mt-0.5">
@@ -138,23 +147,30 @@ export default function FormalReportPreviewPage() {
             <div className="bg-slate-100 p-1 rounded-lg flex items-center border border-slate-200 text-xs">
               <button
                 onClick={() => setViewMode('full')}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
-                  viewMode === 'full'
-                    ? 'bg-[#173B65] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all ${viewMode === 'full'
+                  ? 'bg-[#173B65] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 Full Results (7 cols)
               </button>
               <button
                 onClick={() => setViewMode('positive')}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
-                  viewMode === 'positive'
-                    ? 'bg-[#E53935] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all ${viewMode === 'positive'
+                  ? 'bg-[#E53935] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 Positive Only (4 cols)
+              </button>
+              <button
+                onClick={() => setViewMode('negative')}
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all ${viewMode === 'negative'
+                  ? 'bg-[#173B65] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
+              >
+                Negative Only (4 cols)
               </button>
             </div>
 
@@ -172,7 +188,9 @@ export default function FormalReportPreviewPage() {
               href={
                 viewMode === 'full'
                   ? `/api/reports/${report.id}/export/excel`
-                  : `/api/reports/${report.id}/export/positive/excel`
+                  : viewMode === 'positive'
+                    ? `/api/reports/${report.id}/export/positive/excel`
+                    : `/api/reports/${report.id}/export/negative/excel`
               }
               className="px-3.5 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
             >
@@ -185,7 +203,9 @@ export default function FormalReportPreviewPage() {
               href={
                 viewMode === 'full'
                   ? `/api/reports/${report.id}/export/pdf`
-                  : `/api/reports/${report.id}/export/positive/pdf`
+                  : viewMode === 'positive'
+                    ? `/api/reports/${report.id}/export/positive/pdf`
+                    : `/api/reports/${report.id}/export/negative/pdf`
               }
               className="px-3.5 py-1.5 text-xs font-bold bg-[#E53935] hover:bg-red-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
             >
@@ -278,12 +298,28 @@ export default function FormalReportPreviewPage() {
                   المجموعه:
                 </div>
 
-                {/* Row 6: Number of Positive Samples (IN RED BOLD!) */}
+                {/* Row 6: Total Samples */}
+                <div className="col-span-8 p-1.5 text-center font-bold text-slate-800 text-sm border-r border-slate-800">
+                  {report.totalSamples}
+                </div>
+                <div className="col-span-4 p-1.5 text-right font-bold text-slate-800 pr-3">
+                  إجمالي عدد العينات:
+                </div>
+
+                {/* Row 7: Number of Positive Samples (IN RED BOLD!) */}
                 <div className="col-span-8 p-1.5 text-center font-black text-[#E53935] text-base border-r border-slate-800">
-                  {report.bothPositiveCount}
+                  {positiveSamplesOnly.length}
                 </div>
                 <div className="col-span-4 p-1.5 text-right font-bold text-slate-800 pr-3">
                   عدد العينات الإيجابية:
+                </div>
+
+                {/* Row 8: Number of Negative Samples */}
+                <div className="col-span-8 p-1.5 text-center font-bold text-[#173B65] text-base border-r border-slate-800">
+                  {negativeCount}
+                </div>
+                <div className="col-span-4 p-1.5 text-right font-bold text-slate-800 pr-3">
+                  عدد العينات السلبية:
                 </div>
               </div>
             </div>
@@ -297,13 +333,24 @@ export default function FormalReportPreviewPage() {
           </div>
 
           {/* 3. THRESHOLD EXPLANATION BANNER */}
-          <div className="mt-4 border-2 border-slate-800 rounded-xl p-2.5 text-center font-arabic text-xs leading-relaxed bg-white">
-            <span>تعتبر العينات </span>
+          <div
+            dir="rtl"
+            className="mt-4 border-2 border-slate-800 rounded-xl p-2.5 text-center font-arabic text-xs leading-relaxed bg-white"
+          >
+            <span>تُعتبر العينات </span>
             <span className="font-extrabold text-[#E53935] underline">إيجابية</span>
-            <span> وفقا لاشتراطات اللجنة المنظمة لسباقات الهجن إذا تجاوزت أو بلغت القيم المحددة للهيموجلوبين (HGB) والهيماتوكريت (HCT) معاً، وذلك وفقًا للحدود </span>
-            <span className="font-black text-[#E53935] underline font-mono">
-              (HGB &ge; {report.hgbThreshold}, HCT &ge; {report.hctThreshold})
-            </span>
+            <span> وفقًا لاشتراطات اللجنة المنظمة لسباقات الهجن إذا تجاوزت أو بلغت القيم المحددة للهيموجلوبين </span>
+            <bdi dir="ltr" className="font-bold font-sans">
+              (HGB)
+            </bdi>
+            <span> والهيماتوكريت </span>
+            <bdi dir="ltr" className="font-bold font-sans">
+              (HCT)
+            </bdi>
+            <span> معا، وذلك وفقًا للحدود </span>
+            <bdi dir="ltr" className="font-black text-[#E53935] underline font-mono">
+              (HGB &ge; {report.hgbThreshold || 14}, HCT &ge; {report.hctThreshold || 32})
+            </bdi>
           </div>
 
           {/* 4. SECTION TITLE */}
@@ -312,9 +359,13 @@ export default function FormalReportPreviewPage() {
               <h3 className="text-lg font-black text-slate-900 underline font-arabic tracking-wider">
                 النتائج الإجمالية
               </h3>
-            ) : (
+            ) : viewMode === 'positive' ? (
               <h3 className="text-lg font-black text-[#E53935] underline font-arabic tracking-wider">
                 المطايا الإيجابية
+              </h3>
+            ) : (
+              <h3 className="text-lg font-black text-[#173B65] underline font-arabic tracking-wider">
+                المطايا السلبية
               </h3>
             )}
           </div>
@@ -351,9 +402,8 @@ export default function FormalReportPreviewPage() {
                         {s.hgbValue.toFixed(1)}
                       </td>
                       <td
-                        className={`py-1 px-3 border border-slate-800 font-bold ${
-                          s.hgbStatus === 'POSITIVE' ? 'text-[#E53935]' : 'text-[#285783]'
-                        }`}
+                        className={`py-1 px-3 border border-slate-800 font-bold ${s.hgbStatus === 'POSITIVE' ? 'text-[#E53935]' : 'text-[#285783]'
+                          }`}
                       >
                         {s.hgbStatus}
                       </td>
@@ -361,9 +411,8 @@ export default function FormalReportPreviewPage() {
                         {s.hctValue.toFixed(1)}
                       </td>
                       <td
-                        className={`py-1 px-3 border border-slate-800 font-bold ${
-                          s.hctStatus === 'POSITIVE' ? 'text-[#E53935]' : 'text-[#285783]'
-                        }`}
+                        className={`py-1 px-3 border border-slate-800 font-bold ${s.hctStatus === 'POSITIVE' ? 'text-[#E53935]' : 'text-[#285783]'
+                          }`}
                       >
                         {s.hctStatus}
                       </td>
@@ -375,7 +424,7 @@ export default function FormalReportPreviewPage() {
                 </tbody>
               </table>
             </div>
-          ) : (
+          ) : viewMode === 'positive' ? (
             /* POSITIVE ONLY TABLE (4 COLUMNS MATCHING REFERENCE 2) */
             <div className="overflow-x-auto max-w-2xl mx-auto">
               <table className="w-full text-center text-xs border-collapse border border-slate-800">
@@ -397,12 +446,12 @@ export default function FormalReportPreviewPage() {
                         <td className="py-1.5 px-6 border border-slate-800 font-mono font-bold text-slate-800">
                           {s.sampleCode}
                         </td>
-                        {/* Red bold font for positive measurements */}
+                        {/* Red bold font for positive measurements, empty cell if negative */}
                         <td className="py-1.5 px-6 border border-slate-800 font-black text-[#E53935] text-sm">
-                          {s.hgbValue.toFixed(1)}
+                          {s.hgbStatus === 'POSITIVE' ? s.hgbValue.toFixed(1) : ''}
                         </td>
                         <td className="py-1.5 px-6 border border-slate-800 font-black text-[#E53935] text-sm">
-                          {s.hctValue.toFixed(1)}
+                          {s.hctStatus === 'POSITIVE' ? s.hctValue.toFixed(1) : ''}
                         </td>
                       </tr>
                     ))
@@ -416,12 +465,63 @@ export default function FormalReportPreviewPage() {
                 </tbody>
               </table>
             </div>
+          ) : (
+            /* NEGATIVE ONLY TABLE (4 COLUMNS) */
+            <div className="overflow-x-auto max-w-2xl mx-auto">
+              <table className="w-full text-center text-xs border-collapse border border-slate-800">
+                <thead className="bg-[#173B65] text-white">
+                  <tr>
+                    <th className="py-2 px-3 border border-slate-800 font-bold w-14">SN</th>
+                    <th className="py-2 px-6 border border-slate-800 font-bold">SAMPLE CODE</th>
+                    <th className="py-2 px-6 border border-slate-800 font-bold">HGB (g/dL)</th>
+                    <th className="py-2 px-6 border border-slate-800 font-bold">HCT (%)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {negativeSamplesOnly.length > 0 ? (
+                    negativeSamplesOnly.map((s, idx) => (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="py-1.5 px-3 border border-slate-800 font-bold text-slate-700">
+                          {idx + 1}
+                        </td>
+                        <td className="py-1.5 px-6 border border-slate-800 font-mono font-bold text-slate-800">
+                          {s.sampleCode}
+                        </td>
+                        {/* Normal font for negative measurements, empty cell if positive */}
+                        <td className="py-1.5 px-6 border border-slate-800 font-semibold text-slate-800 text-sm">
+                          {s.hgbStatus !== 'POSITIVE' ? s.hgbValue.toFixed(1) : ''}
+                        </td>
+                        <td className="py-1.5 px-6 border border-slate-800 font-semibold text-slate-800 text-sm">
+                          {s.hctStatus !== 'POSITIVE' ? s.hctValue.toFixed(1) : ''}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
+                        No negative samples in this report.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {/* 6. BOTTOM FOOTER WITH VALIDATED STAMP */}
           <div className="mt-8 pt-4 border-t border-slate-200 flex items-end justify-between">
             <div className="text-xs text-slate-500 font-medium">
-              Page 1 of {Math.max(1, Math.ceil(report.samples.length / 26))}
+              Page 1 of{' '}
+              {Math.max(
+                1,
+                Math.ceil(
+                  (viewMode === 'positive'
+                    ? positiveSamplesOnly.length
+                    : viewMode === 'negative'
+                      ? negativeSamplesOnly.length
+                      : report.samples.length) / 26
+                )
+              )}
             </div>
 
             {/* Validated Stamp matching Reference Image 2 */}

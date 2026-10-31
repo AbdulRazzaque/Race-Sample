@@ -12,6 +12,8 @@ export async function middleware(request: NextRequest) {
   // Public paths
   if (
     pathname === '/login' ||
+    pathname === '/api/health' ||
+    pathname.startsWith('/api/health') ||
     pathname.startsWith('/api/auth/login') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/images') ||

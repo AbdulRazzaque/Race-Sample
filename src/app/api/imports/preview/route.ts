@@ -21,10 +21,10 @@ export async function POST(request: NextRequest) {
 
     // Check file extension
     const fileName = file.name;
-    const isExcel = /\.(xlsx|xls)$/i.test(fileName);
-    if (!isExcel) {
+    const isSupported = /\.(xlsx|xls|csv)$/i.test(fileName);
+    if (!isSupported) {
       return NextResponse.json(
-        { success: false, error: 'Invalid file format. Please upload an Excel (.xlsx or .xls) file.' },
+        { success: false, error: 'Invalid file format. Please upload a CSV or Excel (.csv, .xlsx, or .xls) file.' },
         { status: 400 }
       );
     }

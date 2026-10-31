@@ -142,7 +142,7 @@ export class SQLiteManager {
         {
           key: 'reportHeaderNotes',
           value:
-            'تعتبر العينات إيجابية وفقا لاشتراطات اللجنة المنظمة لسباقات الهجن إذا تجاوزت أو بلغت القيم المحددة للهيموجلوبين (HGB) والهيماتوكريت (HCT) معاً، وذلك وفقًا للحدود (HGB ≥ 14, HCT ≥ 32)',
+            'تُعتبر العينات إيجابية وفقًا لاشتراطات اللجنة المنظمة لسباقات الهجن إذا تجاوزت أو بلغت القيم المحددة للهيموجلوبين (HGB) والهيماتوكريت (HCT) معا، وذلك وفقًا للحدود (HGB ≥ 14, HCT ≥ 32)',
         },
         { key: 'footerText', value: 'FIRST LAB — Camel CBC Analysis Validation System' },
       ];
@@ -274,7 +274,7 @@ export class SQLiteManager {
         `SELECT "id" FROM "_app_migrations" ORDER BY "appliedAt" ASC`
       )) as Array<{ id: string }>;
       migrationsApplied = rows.map((r) => r.id);
-    } catch {}
+    } catch { }
 
     const totalBackups = this.listBackups(databasePath).length;
 

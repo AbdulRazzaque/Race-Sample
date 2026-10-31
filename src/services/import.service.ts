@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 import prisma from '@/lib/db/prisma';
 import { CalculationService } from './calculation.service';
 import { SettingsService } from './settings.service';
@@ -24,10 +25,10 @@ export class ImportService {
   /**
    * Helper to normalize a header string for matching
    */
-  private static normalizeHeader(str: string): string {
+  public static normalizeHeader(str: string): string {
     return str
       .toLowerCase()
-      .replace(/[\s_\-()\/\\%]/g, '')
+      .replace(/[\s_\-()\/\\%\.#\[\]]/g, '')
       .trim();
   }
 
@@ -54,7 +55,9 @@ export class ImportService {
     };
 
     for (const h of headers) {
-      const norm = this.normalizeHeader(h);
+      if (!h || typeof h !== 'string') continue;
+      const trimmed = h.trim();
+      const norm = this.normalizeHeader(trimmed);
 
       // BOTH POSITIVE
       if (
@@ -68,7 +71,7 @@ export class ImportService {
         continue;
       }
 
-      // HGB STATUS
+      // HGB STATUS (must not be confused with HGB measurement value)
       if (
         norm === 'hgbstatus' ||
         norm === 'hemoglobinstatus' ||
@@ -79,7 +82,7 @@ export class ImportService {
         continue;
       }
 
-      // HCT STATUS
+      // HCT STATUS (must not be confused with HCT measurement value)
       if (
         norm === 'hctstatus' ||
         norm === 'hematocritstatus' ||
@@ -90,43 +93,58 @@ export class ImportService {
         continue;
       }
 
-      // SAMPLE CODE
+      // SAMPLE CODE / SAMPLE NO (e.g. "Sample No.", "Sample No", "SAMPLE CODE", "Sample ID")
       if (
+        trimmed.toLowerCase() === 'sample no.' ||
+        trimmed.toLowerCase() === 'sample no' ||
+        norm === 'sampleno' ||
         norm === 'samplecode' ||
         norm === 'sampleid' ||
-        norm === 'sampleno' ||
         norm === 'barcode' ||
         norm === 'code' ||
-        norm === 'sample' ||
         norm.includes('samplecode') ||
+        norm.includes('sampleno') ||
         norm.includes('كودالعينة') ||
-        norm.includes('الرمز')
+        norm.includes('الرمز') ||
+        norm === 'sample'
       ) {
         if (!result.sampleCode) result.sampleCode = h;
         continue;
       }
 
-      // HGB (Value)
+      // HGB (Value) - Match "HGB(g/dL)", "HGB", "Hemoglobin", "Hb". Exclude modifiers like "HGB/M"
       if (
-        norm === 'hgb' ||
-        norm === 'hgbgdl' ||
-        norm === 'hemoglobin' ||
-        norm === 'hb' ||
-        norm.startsWith('hgb') ||
-        norm.includes('هيموجلوبين')
+        !norm.endsWith('m') &&
+        !norm.includes('abnormal') &&
+        !norm.includes('suspect') &&
+        (
+          trimmed.toLowerCase() === 'hgb(g/dl)' ||
+          trimmed.toLowerCase() === 'hgb (g/dl)' ||
+          norm === 'hgbgdl' ||
+          norm === 'hgb' ||
+          norm === 'hemoglobin' ||
+          norm === 'hb' ||
+          norm.includes('هيموجلوبين')
+        )
       ) {
         if (!result.hgb) result.hgb = h;
         continue;
       }
 
-      // HCT (Value)
+      // HCT (Value) - Match "HCT(%)", "HCT", "Hematocrit", "PCV". Exclude modifiers like "HCT/M"
       if (
-        norm === 'hct' ||
-        norm === 'hct%' ||
-        norm === 'hematocrit' ||
-        norm === 'pcv' ||
-        norm.startsWith('hct') ||
-        norm.includes('هيماتوكريت')
+        !norm.endsWith('m') &&
+        !norm.includes('abnormal') &&
+        !norm.includes('suspect') &&
+        (
+          trimmed.toLowerCase() === 'hct(%)' ||
+          trimmed.toLowerCase() === 'hct (%)' ||
+          norm === 'hct%' ||
+          norm === 'hct' ||
+          norm === 'hematocrit' ||
+          norm === 'pcv' ||
+          norm.includes('هيماتوكريت')
+        )
       ) {
         if (!result.hct) result.hct = h;
         continue;
@@ -149,7 +167,8 @@ export class ImportService {
   }
 
   /**
-   * Parse workbook buffer and generate preview with calculation results
+   * Parse workbook/CSV buffer and generate preview with calculation results.
+   * Reads only the three required columns (Sample No., HGB, HCT) and ignores all others.
    */
   public static async parseAndPreview(
     buffer: Buffer,
@@ -158,32 +177,66 @@ export class ImportService {
     mappingOverride?: Partial<ColumnMapping>,
     customThresholds?: ThresholdConfig
   ): Promise<ImportPreviewResult> {
-    // 1. Read workbook
-    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-      throw new Error('Workbook contains no worksheets.');
+    // 1. Read buffer based on file extension
+    const isCsv = /\.csv$/i.test(fileName);
+    let rawRows: any[][] = [];
+    let availableWorksheets: string[] = ['Sheet1'];
+    let worksheetName = 'Sheet1';
+
+    if (isCsv) {
+      let content = buffer.toString('utf8');
+      // Strip UTF-8 BOM if present
+      if (content.charCodeAt(0) === 0xFEFF) {
+        content = content.slice(1);
+      }
+
+      if (!content.trim()) {
+        throw new Error('File is completely empty.');
+      }
+
+      const parsed = Papa.parse<any[]>(content, {
+        header: false,
+        skipEmptyLines: 'greedy',
+      });
+
+      if (parsed.errors && parsed.errors.length > 0) {
+        const fatal = parsed.errors.find((e) => e.type === 'Quotes');
+        if (fatal) {
+          throw new Error(`CSV Parsing error: ${fatal.message} on line ${fatal.row || 1}`);
+        }
+      }
+
+      rawRows = (parsed.data || []) as any[][];
+      availableWorksheets = ['CSV'];
+      worksheetName = 'CSV';
+    } else {
+      // Read Excel workbook (.xlsx / .xls)
+      const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('Workbook contains no worksheets or data.');
+      }
+
+      availableWorksheets = workbook.SheetNames;
+      worksheetName =
+        sheetNameOverride && availableWorksheets.includes(sheetNameOverride)
+          ? sheetNameOverride
+          : availableWorksheets[0];
+
+      const worksheet = workbook.Sheets[worksheetName];
+      if (!worksheet) {
+        throw new Error(`Worksheet "${worksheetName}" not found.`);
+      }
+
+      // Convert worksheet to raw 2D array of rows
+      rawRows = XLSX.utils.sheet_to_json<any[]>(worksheet, {
+        header: 1,
+        defval: '',
+        blankrows: false,
+      });
     }
-
-    const availableWorksheets = workbook.SheetNames;
-    const worksheetName =
-      sheetNameOverride && availableWorksheets.includes(sheetNameOverride)
-        ? sheetNameOverride
-        : availableWorksheets[0];
-
-    const worksheet = workbook.Sheets[worksheetName];
-    if (!worksheet) {
-      throw new Error(`Worksheet "${worksheetName}" not found.`);
-    }
-
-    // 2. Convert to raw 2D array of rows to locate headers properly
-    const rawRows = XLSX.utils.sheet_to_json<any[]>(worksheet, {
-      header: 1,
-      defval: '',
-      blankrows: false,
-    });
 
     if (rawRows.length === 0) {
-      throw new Error('Worksheet is completely empty.');
+      throw new Error('File is completely empty.');
     }
 
     // Locate header row: scan first 10 rows for recognizable columns
@@ -193,7 +246,10 @@ export class ImportService {
     for (let r = 0; r < Math.min(rawRows.length, 10); r++) {
       const candidateHeaders = (rawRows[r] || []).map((c: any) => String(c).trim());
       const detected = this.detectColumns(candidateHeaders);
-      if (detected.sampleCode || (detected.hgb && detected.hct)) {
+      if (
+        (detected.sampleCode && (detected.hgb || detected.hct)) ||
+        (detected.hgb && detected.hct)
+      ) {
         headerRowIndex = r;
         headers = candidateHeaders;
         break;
@@ -220,11 +276,48 @@ export class ImportService {
       bothPositive: mappingOverride?.bothPositive || autoDetected.bothPositive || undefined,
     };
 
+    // Validation: Check for required columns
+    const missingColumns: string[] = [];
+    if (!finalMapping.sampleCode) missingColumns.push('Sample No.');
+    if (!finalMapping.hgb) missingColumns.push('HGB(g/dL)');
+    if (!finalMapping.hct) missingColumns.push('HCT(%)');
+
+    if (missingColumns.length > 0) {
+      throw new Error(
+        `Required column(s) missing from file: ${missingColumns.join(', ')}. Please verify that the analyzer file contains Sample No., HGB(g/dL), and HCT(%).`
+      );
+    }
+
+    // Validation: Prevent duplicate or overlapping mappings
+    if (
+      finalMapping.sampleCode === finalMapping.hgb ||
+      finalMapping.sampleCode === finalMapping.hct ||
+      finalMapping.hgb === finalMapping.hct
+    ) {
+      throw new Error(
+        'Duplicate column mapping: Sample No., HGB(g/dL), and HCT(%) cannot be mapped to the same column.'
+      );
+    }
+
+    const sampleCodeColIdx = headers.indexOf(finalMapping.sampleCode);
+    const hgbColIdx = headers.indexOf(finalMapping.hgb);
+    const hctColIdx = headers.indexOf(finalMapping.hct);
+
+    if (sampleCodeColIdx === -1 || hgbColIdx === -1 || hctColIdx === -1) {
+      const notFound: string[] = [];
+      if (sampleCodeColIdx === -1) notFound.push(finalMapping.sampleCode);
+      if (hgbColIdx === -1) notFound.push(finalMapping.hgb);
+      if (hctColIdx === -1) notFound.push(finalMapping.hct);
+      throw new Error(
+        `Required column(s) not found in header row: ${notFound.join(', ')}`
+      );
+    }
+
     // Thresholds
     const activeThresholds =
       customThresholds || (await SettingsService.getThresholds());
 
-    // 3. Parse data rows
+    // 3. Parse data rows - read only the three required columns, ignore all other columns
     const dataRowArray = rawRows.slice(headerRowIndex + 1);
     const validRows: ValidatedRow[] = [];
     const errors: RowValidationError[] = [];
@@ -234,7 +327,7 @@ export class ImportService {
 
     for (let i = 0; i < dataRowArray.length; i++) {
       const row = dataRowArray[i];
-      const actualRowNumber = headerRowIndex + 2 + i; // 1-indexed Excel row
+      const actualRowNumber = headerRowIndex + 2 + i; // 1-indexed row
 
       // Check if row is completely empty
       const isAllBlank = row.every(
@@ -244,31 +337,34 @@ export class ImportService {
         continue; // skip blank row cleanly
       }
 
+      // Read ONLY the three required columns
+      const rawSampleCode = row[sampleCodeColIdx];
+      const rawHgb = row[hgbColIdx];
+      const rawHct = row[hctColIdx];
+
+      // Cleanly skip rows where all 3 required columns are empty (e.g. trailing summary / empty cells)
+      const isRequiredAllEmpty =
+        (rawSampleCode === '' || rawSampleCode === null || rawSampleCode === undefined) &&
+        (rawHgb === '' || rawHgb === null || rawHgb === undefined) &&
+        (rawHct === '' || rawHct === null || rawHct === undefined);
+      if (isRequiredAllEmpty) {
+        continue;
+      }
+
       totalParsed++;
 
-      // Map values
-      const getVal = (colName?: string) => {
-        if (!colName) return undefined;
-        const colIdx = headers.indexOf(colName);
-        if (colIdx === -1) return undefined;
-        return row[colIdx];
-      };
-
-      const rawSampleCode = getVal(finalMapping.sampleCode);
-      const rawHgb = getVal(finalMapping.hgb);
-      const rawHct = getVal(finalMapping.hct);
-
-      const sampleCodeStr = rawSampleCode !== undefined && rawSampleCode !== null
-        ? String(rawSampleCode).trim()
-        : '';
+      const sampleCodeStr =
+        rawSampleCode !== undefined && rawSampleCode !== null
+          ? String(rawSampleCode).trim()
+          : '';
 
       // Validation 1: Sample Code required
       if (!sampleCodeStr) {
         errors.push({
           rowIndex: actualRowNumber,
-          columnName: finalMapping.sampleCode || 'SAMPLE CODE',
+          columnName: finalMapping.sampleCode || 'Sample No.',
           errorCode: 'MISSING_SAMPLE_CODE',
-          errorMessage: 'Sample code is missing or empty',
+          errorMessage: 'Sample code (Sample No.) is missing or empty',
           originalValue: String(rawSampleCode ?? ''),
         });
         continue;
@@ -278,7 +374,7 @@ export class ImportService {
       if (seenSampleCodes.has(sampleCodeStr)) {
         errors.push({
           rowIndex: actualRowNumber,
-          columnName: finalMapping.sampleCode || 'SAMPLE CODE',
+          columnName: finalMapping.sampleCode || 'Sample No.',
           sampleCode: sampleCodeStr,
           errorCode: 'DUPLICATE_SAMPLE_CODE',
           errorMessage: `Duplicate sample code "${sampleCodeStr}" within this import file`,
@@ -292,7 +388,7 @@ export class ImportService {
       if (parsedHgb === null) {
         errors.push({
           rowIndex: actualRowNumber,
-          columnName: finalMapping.hgb || 'HGB',
+          columnName: finalMapping.hgb || 'HGB(g/dL)',
           sampleCode: sampleCodeStr,
           errorCode: 'INVALID_HGB',
           errorMessage: `HGB value is missing or non-numeric (got "${rawHgb}")`,
@@ -306,7 +402,7 @@ export class ImportService {
       if (parsedHct === null) {
         errors.push({
           rowIndex: actualRowNumber,
-          columnName: finalMapping.hct || 'HCT',
+          columnName: finalMapping.hct || 'HCT(%)',
           sampleCode: sampleCodeStr,
           errorCode: 'INVALID_HCT',
           errorMessage: `HCT value is missing or non-numeric (got "${rawHct}")`,
@@ -396,7 +492,8 @@ export class ImportService {
   }
 
   /**
-   * Confirms import and writes report + sample records within a database transaction
+   * Confirms import and writes report + sample records within a database transaction.
+   * Matches records using Sample No. and does not modify unrelated records.
    */
   public static async confirmImport(params: {
     fileName: string;
@@ -409,6 +506,7 @@ export class ImportService {
     ageCategory?: string;
     sampleReceiptDate?: Date;
     reportNumber?: string;
+    reportId?: string;
   }) {
     const {
       fileName,
@@ -421,6 +519,7 @@ export class ImportService {
       ageCategory,
       sampleReceiptDate,
       reportNumber: customReportNumber,
+      reportId: targetReportId,
     } = params;
 
     if (validRows.length === 0) {
@@ -442,44 +541,105 @@ export class ImportService {
 
     // Execute in a single Prisma transaction
     const savedReport = await prisma.$transaction(async (tx) => {
-      // 1. Create Report
-      const report = await tx.report.create({
-        data: {
-          reportNumber: finalReportNumber,
-          title: reportTitle || appSettings.eventName || 'تحليل فحص صورة الدم (CBC)',
-          organizationNameSnapshot: appSettings.orgName,
-          recipientName: recipientName || appSettings.recipientName,
-          sampleReceiptDate: sampleReceiptDate || new Date(),
-          generatedAt: new Date(),
-          originalFileName: fileName,
-          ageCategory: ageCategory || appSettings.ageCategory || 'حقائق',
-          batchIdentifier,
-          totalSamples: validRows.length,
-          positiveHgbCount,
-          positiveHctCount,
-          bothPositiveCount,
-          hgbThreshold: new Prisma.Decimal(thresholds.hgbThreshold),
-          hctThreshold: new Prisma.Decimal(thresholds.hctThreshold),
-          status: 'ACTIVE',
-          createdByAdminId: adminUserId || null,
-        },
-      });
+      let report: any;
 
-      // 2. Batch insert samples with sequential SN
-      const sampleData = validRows.map((r, idx) => ({
-        reportId: report.id,
-        sampleCode: r.sampleCode,
-        rowNumber: idx + 1, // SN: 1, 2, 3...
-        hgbValue: new Prisma.Decimal(r.hgbValue),
-        hgbStatus: r.hgbStatus,
-        hctValue: new Prisma.Decimal(r.hctValue),
-        hctStatus: r.hctStatus,
-        bothPositive: r.bothPositive,
-      }));
+      if (targetReportId) {
+        report = await tx.report.findUnique({
+          where: { id: targetReportId },
+        });
 
-      await tx.sample.createMany({
-        data: sampleData,
-      });
+        if (!report) {
+          throw new Error(`Report with id "${targetReportId}" not found.`);
+        }
+
+        // Update target report metadata and counts
+        await tx.report.update({
+          where: { id: report.id },
+          data: {
+            title: reportTitle || report.title,
+            recipientName: recipientName || report.recipientName,
+            ageCategory: ageCategory || report.ageCategory,
+            sampleReceiptDate: sampleReceiptDate || report.sampleReceiptDate,
+            batchIdentifier,
+            totalSamples: validRows.length,
+            positiveHgbCount,
+            positiveHctCount,
+            bothPositiveCount,
+            hgbThreshold: new Prisma.Decimal(thresholds.hgbThreshold),
+            hctThreshold: new Prisma.Decimal(thresholds.hctThreshold),
+          },
+        });
+
+        // Match records using Sample No. (sampleCode)
+        for (let idx = 0; idx < validRows.length; idx++) {
+          const r = validRows[idx];
+          await tx.sample.upsert({
+            where: {
+              reportId_sampleCode: {
+                reportId: report.id,
+                sampleCode: r.sampleCode,
+              },
+            },
+            update: {
+              hgbValue: new Prisma.Decimal(r.hgbValue),
+              hgbStatus: r.hgbStatus,
+              hctValue: new Prisma.Decimal(r.hctValue),
+              hctStatus: r.hctStatus,
+              bothPositive: r.bothPositive,
+              rowNumber: idx + 1,
+            },
+            create: {
+              reportId: report.id,
+              sampleCode: r.sampleCode,
+              rowNumber: idx + 1,
+              hgbValue: new Prisma.Decimal(r.hgbValue),
+              hgbStatus: r.hgbStatus,
+              hctValue: new Prisma.Decimal(r.hctValue),
+              hctStatus: r.hctStatus,
+              bothPositive: r.bothPositive,
+            },
+          });
+        }
+      } else {
+        // 1. Create Report
+        report = await tx.report.create({
+          data: {
+            reportNumber: finalReportNumber,
+            title: reportTitle || appSettings.eventName || 'تحليل فحص صورة الدم (CBC)',
+            organizationNameSnapshot: appSettings.orgName,
+            recipientName: recipientName || appSettings.recipientName,
+            sampleReceiptDate: sampleReceiptDate || new Date(),
+            generatedAt: new Date(),
+            originalFileName: fileName,
+            ageCategory: ageCategory || appSettings.ageCategory || 'حقائق',
+            batchIdentifier,
+            totalSamples: validRows.length,
+            positiveHgbCount,
+            positiveHctCount,
+            bothPositiveCount,
+            hgbThreshold: new Prisma.Decimal(thresholds.hgbThreshold),
+            hctThreshold: new Prisma.Decimal(thresholds.hctThreshold),
+            status: 'ACTIVE',
+            createdByAdminId: adminUserId || null,
+          },
+        });
+
+        // 2. Batch insert samples with sequential SN
+        const sampleData = validRows.map((r, idx) => ({
+          reportId: report.id,
+          sampleCode: r.sampleCode,
+          rowNumber: idx + 1, // SN: 1, 2, 3...
+          hgbValue: new Prisma.Decimal(r.hgbValue),
+          hgbStatus: r.hgbStatus,
+          hctValue: new Prisma.Decimal(r.hctValue),
+          hctStatus: r.hctStatus,
+          bothPositive: r.bothPositive,
+        }));
+
+        await tx.sample.createMany({
+          data: sampleData,
+        });
+      }
 
       // 3. Create ImportJob record
       const importJob = await tx.importJob.create({

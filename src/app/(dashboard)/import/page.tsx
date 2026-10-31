@@ -94,8 +94,8 @@ export default function ImportPage() {
   };
 
   const handleFileSelected = async (selected: File) => {
-    if (!/\.(xlsx|xls)$/i.test(selected.name)) {
-      setError('Please select a valid Excel (.xlsx or .xls) file.');
+    if (!/\.(xlsx|xls|csv)$/i.test(selected.name)) {
+      setError('Please select a valid CSV or Excel (.csv, .xlsx, or .xls) file.');
       return;
     }
     setError(null);
@@ -344,20 +344,20 @@ export default function ImportPage() {
               {/* Download Sample Template Button in top-right */}
               <div className="absolute top-5 right-5">
                 <a
-                  href="/downloads/sample_import_template.xlsx"
+                  href="/downloads/analyzer_sample_template.csv"
                   download
                   className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-xs transition-colors"
                 >
                   <Download className="w-3.5 h-3.5 text-[#1E60AA]" />
-                  <span>Download Sample Template</span>
-                  <span className="text-[10px] text-slate-400">.xlsx format</span>
+                  <span>Download Sample CSV</span>
+                  <span className="text-[10px] text-slate-400">.csv format</span>
                 </a>
               </div>
 
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".csv,.xlsx,.xls"
                 onChange={handleFileChange}
                 className="hidden"
                 id="file-upload"
@@ -369,12 +369,12 @@ export default function ImportPage() {
               </div>
 
               <h3 className="text-base font-bold text-[#0F2642]">
-                {loading ? 'Analyzing Excel workbook...' : 'Drag and drop your Excel file here'}
+                {loading ? 'Analyzing analyzer file...' : 'Drag and drop your analyzer CSV or Excel file here'}
               </h3>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Supported formats: .xlsx, .xls up to 15MB
+                Supported formats: .csv, .xlsx, .xls up to 15MB
                 <br />
-                Automatically detects SAMPLE CODE, HGB, and HCT columns.
+                Automatically detects Sample No., HGB(g/dL), and HCT(%) columns.
               </p>
 
               <div className="mt-6">
@@ -418,7 +418,7 @@ export default function ImportPage() {
                         <div>
                           <div className="text-xs font-bold text-slate-800">{file.name}</div>
                           <div className="text-[10px] text-slate-500">
-                            {(file.size / 1024).toFixed(1)} KB • {file.name.endsWith('.xlsx') ? 'XLSX' : 'XLS'}
+                            {(file.size / 1024).toFixed(1)} KB • {file.name.endsWith('.csv') ? 'CSV' : file.name.endsWith('.xlsx') ? 'XLSX' : 'XLS'}
                           </div>
                         </div>
                       </div>
@@ -439,7 +439,7 @@ export default function ImportPage() {
                     </div>
                   ) : (
                     <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                      No file uploaded yet. Drop an Excel workbook above to start.
+                      No file uploaded yet. Drop an analyzer CSV or Excel file above to start.
                     </div>
                   )}
                 </div>
@@ -449,13 +449,13 @@ export default function ImportPage() {
                   <Info className="w-5 h-5 text-[#1E60AA] flex-shrink-0 mt-0.5" />
                   <div>
                     <div className="font-bold text-[#0F2642]">
-                      Supported Column Names (auto-detect)
+                      Required Analyzer Columns (auto-detect)
                     </div>
                     <p className="text-slate-600 text-[11px] mt-0.5 font-mono">
-                      SAMPLE CODE, SampleCode, HGB, HGB (g/dL), HCT, HCT (%), etc.
+                      1. Sample No. &bull; 2. HGB(g/dL) &bull; 3. HCT(%)
                     </p>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      You can map columns manually if needed.
+                      Accepts analyzer files with 250+ columns; only the 3 required columns are read and imported.
                     </p>
                   </div>
                 </div>
@@ -470,31 +470,31 @@ export default function ImportPage() {
                 <ul className="space-y-2 text-xs text-slate-600">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>Supports .xlsx and .xls files</span>
+                    <span>Supports analyzer .csv, .xlsx, and .xls files</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>Auto detects required columns</span>
+                    <span>Auto-detects Sample No., HGB(g/dL), and HCT(%)</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>Validates data before import</span>
+                    <span>Ignores all other non-required analyzer columns</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>Calculates HGB/HCT status automatically</span>
+                    <span>Accurately preserves decimal values</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>Shows preview before saving</span>
+                    <span>Calculates HGB/HCT positivity status automatically</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>Handles duplicate sample codes</span>
+                    <span>Validates missing or invalid measurements</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>Maximum file size: 15MB</span>
+                    <span>Handles and reports duplicate sample numbers</span>
                   </li>
                 </ul>
               </div>
@@ -558,7 +558,7 @@ export default function ImportPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Sample Code Column <span className="text-red-500">*</span>
+                    Sample No. Column <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={mapping.sampleCode}
@@ -611,10 +611,28 @@ export default function ImportPage() {
                 </div>
               </div>
 
+              {/* Mapping Validation Warning */}
+              {((mapping.sampleCode && mapping.hgb && mapping.sampleCode === mapping.hgb) ||
+                (mapping.sampleCode && mapping.hct && mapping.sampleCode === mapping.hct) ||
+                (mapping.hgb && mapping.hct && mapping.hgb === mapping.hct)) && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <span>Duplicate column mapping detected! Sample No., HGB(g/dL), and HCT(%) must each map to different columns.</span>
+                </div>
+              )}
+
               <div className="mt-3 flex justify-end">
                 <button
                   onClick={handleApplyMapping}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#1E60AA] hover:bg-[#164E8C] rounded-lg transition-colors"
+                  disabled={
+                    !mapping.sampleCode ||
+                    !mapping.hgb ||
+                    !mapping.hct ||
+                    mapping.sampleCode === mapping.hgb ||
+                    mapping.sampleCode === mapping.hct ||
+                    mapping.hgb === mapping.hct
+                  }
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#1E60AA] hover:bg-[#164E8C] rounded-lg transition-colors disabled:opacity-50"
                 >
                   Re-evaluate with Mapping
                 </button>
@@ -677,7 +695,7 @@ export default function ImportPage() {
                   <thead className="bg-[#0F2642] text-white sticky top-0 z-10">
                     <tr>
                       <th className="py-2.5 px-3 font-semibold">SN</th>
-                      <th className="py-2.5 px-3 font-semibold">SAMPLE CODE</th>
+                      <th className="py-2.5 px-3 font-semibold">SAMPLE NO.</th>
                       <th className="py-2.5 px-3 font-semibold">HGB (g/dL)</th>
                       <th className="py-2.5 px-3 font-semibold">HGB STATUS</th>
                       <th className="py-2.5 px-3 font-semibold">HCT (%)</th>
@@ -693,7 +711,7 @@ export default function ImportPage() {
                           {row.sampleCode}
                         </td>
                         <td className="py-2 px-3 font-semibold text-slate-800">
-                          {row.hgbValue.toFixed(1)}
+                          {row.hgbValue}
                         </td>
                         <td className="py-2 px-3">
                           <Badge variant={row.hgbStatus === 'POSITIVE' ? 'positive' : 'negative'}>
@@ -701,7 +719,7 @@ export default function ImportPage() {
                           </Badge>
                         </td>
                         <td className="py-2 px-3 font-semibold text-slate-800">
-                          {row.hctValue.toFixed(1)}
+                          {row.hctValue}
                         </td>
                         <td className="py-2 px-3">
                           <Badge variant={row.hctStatus === 'POSITIVE' ? 'positive' : 'negative'}>
@@ -825,7 +843,7 @@ export default function ImportPage() {
                   Report {completedReport.reportNumber} Created!
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  All valid laboratory sample measurements have been permanently persisted into MySQL.
+                  Successfully imported {completedReport.importedCount} sample records into the database.
                 </p>
               </div>
 

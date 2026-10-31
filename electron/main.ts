@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { autoUpdater } from 'electron-updater';
@@ -54,11 +54,29 @@ function createMainWindow(targetUrl: string): BrowserWindow {
     }
   });
 
+  // Handle navigation failures gracefully
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[ElectronMain] Page failed to load: ${validatedURL} [${errorCode}: ${errorDescription}]`);
+    if (serverInfo && validatedURL.includes(String(serverInfo.port))) {
+      const retryUrl = serverInfo.url;
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          console.log('[ElectronMain] Retrying loadURL after failed initial load...');
+          mainWindow.loadURL(retryUrl);
+        }
+      }, 1200);
+    }
+  });
+
   // Handle external link clicks securely - open in user's default browser
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
-      // Check if external or local
-      if (!url.includes(`127.0.0.1:${serverInfo?.port || 3000}`) && !url.includes(`localhost:${serverInfo?.port || 3000}`)) {
+      const allowedPort = serverInfo?.port ? String(serverInfo.port) : '';
+      const isInternal =
+        allowedPort &&
+        (url.startsWith(`http://127.0.0.1:${allowedPort}`) || url.startsWith(`http://localhost:${allowedPort}`));
+
+      if (!isInternal) {
         shell.openExternal(url);
         return { action: 'deny' };
       }
@@ -285,8 +303,6 @@ app.whenReady().then(async () => {
     }
   } catch (err: any) {
     console.error('[ElectronMain] Fatal initialization error:', err);
-    // Display error dialog if server failed to start
-    const { dialog } = require('electron');
     dialog.showErrorBox(
       'Application Initialization Error',
       `Failed to launch the embedded application engine:\n\n${err?.message || err}\n\nPlease contact support.`

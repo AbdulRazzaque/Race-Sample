@@ -83,6 +83,7 @@ if (fs.existsSync(rootNodeModules) && fs.existsSync(standaloneNodeModules)) {
   }
 
   const exportCorePackages = [
+    'papaparse',
     'pdfkit',
     'exceljs',
     'arabic-persian-reshaper',

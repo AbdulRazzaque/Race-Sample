@@ -36,6 +36,7 @@ const confirmSchema = z.object({
   ageCategory: z.string().optional(),
   reportNumber: z.string().optional(),
   sampleReceiptDate: z.string().optional(),
+  reportId: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
       ageCategory,
       reportNumber,
       sampleReceiptDate,
+      reportId,
     } = parsed.data;
 
     const result = await ImportService.confirmImport({
@@ -77,6 +79,7 @@ export async function POST(request: NextRequest) {
       recipientName,
       ageCategory,
       reportNumber,
+      reportId,
       sampleReceiptDate: sampleReceiptDate ? new Date(sampleReceiptDate) : undefined,
     });
 

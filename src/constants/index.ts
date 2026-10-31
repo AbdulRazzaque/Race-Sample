@@ -12,7 +12,7 @@ export const DEFAULT_APP_SETTINGS = {
   hctThreshold: 32.0,
   dateFormat: 'DD/MM/YYYY',
   timeFormat: 'hh:mm A',
-  reportHeaderNotes: 'تعتبر العينات إيجابية وفقا لاشتراطات اللجنة المنظمة لسباقات الهجن إذا تجاوزت أو بلغت القيم المحددة للهيموجلوبين (HGB) والهيماتوكريت (HCT) معاً، وذلك وفقًا للحدود (HGB ≥ 14, HCT ≥ 32)',
+  reportHeaderNotes: 'تُعتبر العينات إيجابية وفقًا لاشتراطات اللجنة المنظمة لسباقات الهجن إذا تجاوزت أو بلغت القيم المحددة للهيموجلوبين (HGB) والهيماتوكريت (HCT) معا، وذلك وفقًا للحدود (HGB ≥ 14, HCT ≥ 32)',
   footerText: 'FIRST LAB — Camel CBC Analysis Validation System',
   maxUploadSizeBytes: 15 * 1024 * 1024, // 15MB
   maxImportRows: 10000,
